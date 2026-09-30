@@ -381,3 +381,7 @@ ql.run()
 | [`code/unidbg_take_string.java`](code/unidbg_take_string.java) | 串混淆：枚举取串函数 id → dump 全字符串表 |
 | [`code/register_natives.js`](code/register_natives.js) | 捕获接口：hook RegisterNatives → native 方法清单 |
 | [`code/qiling_automap.py`](code/qiling_automap.py) | auto-map 未映射页 → 让库跑到底 |
+
+---
+
+**仓库**：https://github.com/Machao147258-max/-fenxijiyantop1-so
