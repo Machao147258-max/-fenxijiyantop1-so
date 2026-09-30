@@ -139,7 +139,41 @@ for i in md.disasm(data[addr:addr+length], addr):
 - 函数序言 `STP x29,x30`；查表（白盒）连续 `ldr [x_base,#off]`；取串 `adrp+add/ldr`。
 - 大 SO **先定范围再反汇编**，别全量 objdump（会爆炸）。
 
-## 3.5 静态 → 动态 决策
+## 3.5 IDA headless（idat CLI）
+
+> 无 GUI、可批量/脚本化：**`idat -A -S<script> target.so`**（Linux `idat` / Windows `idat.exe`）。
+> 适合：大 SO 定点取证、CI 流水线、无人值守、配合 capstone/unidbg 接力。
+
+```bash
+# -A 无人值守(不弹框, 自动存 .idb)  -S 跑指定脚本  最后一个参数是目标
+idat -A -S"ida_xref.py out_dir" target.so
+# Windows 例: "D:\IDA\idat.exe" -A -S"C:\path\ida_xref.py C:\path\out" C:\path\target.so
+```
+
+**IDAPython：字符串 → xref → 函数 → 反编译**（比啃反汇编快）：
+```python
+# ida_xref.py : 按关键串反查函数并反编译
+import sys, os, idautils, ida_funcs, ida_hexrays, ida_auto, idc
+OUT = sys.argv[1] if len(sys.argv) > 1 else "."
+ida_auto.auto_wait()                        # 等自动分析完成
+KEYS = ["kproxy", "pin-sha256", "verifyServerCertificates", "x-aegon-skip-cert-verify"]
+for s in idautils.Strings():                # 遍历字符串, 命中关键字
+    txt = str(s)
+    if any(k in txt for k in KEYS):
+        for xr in idautils.XrefsTo(s.ea):   # 反查引用它的代码
+            f = ida_funcs.get_func(xr.frm)
+            if f:
+                print("STR %r -> FUNC %s @%x" % (txt[:60], ida_funcs.get_func_name(f.start_ea), f.start_ea))
+                try:
+                    open(os.path.join(OUT, "decomp_%x.txt" % f.start_ea), "w").write(str(ida_hexrays.decompile(f.start_ea)))
+                except Exception: pass
+idc.qexit(0)                                # 跑完退出
+```
+- **要点**：`-A` 自动无人值守、`-S` 跑脚本、**最后参数是目标**；脚本首行 `ida_auto.auto_wait()` 等分析完、结尾 `idc.qexit(0)` 退出。
+- **判据**：大 SO 用"关键串 → xref → 函数 → 反编译"**定点**取证，**别全量反编译**（会爆炸）。
+- 产出：函数地址（可反汇编）+ 反编译文本 → 交给 unidbg 用 `base+offset` 去 hook / `callFunction`。
+
+## 3.6 静态 → 动态 决策
 | 问题 | 静态可答? |
 | --- | --- |
 | 函数在哪、叫什么 | ✅ readelf + 反汇编 |
@@ -378,6 +412,7 @@ ql.run()
 | --- | --- |
 | [`code/so_5min.sh`](code/so_5min.sh) | 5 分钟静态定面（file / readelf / strings / svc 计数） |
 | [`code/disasm_arm64.py`](code/disasm_arm64.py) | capstone 定点反汇编 |
+| [`code/ida_xref.py`](code/ida_xref.py) | IDA headless：关键串 → xref → 函数 → 反编译 |
 | [`code/unidbg_take_string.java`](code/unidbg_take_string.java) | 串混淆：枚举取串函数 id → dump 全字符串表 |
 | [`code/register_natives.js`](code/register_natives.js) | 捕获接口：hook RegisterNatives → native 方法清单 |
 | [`code/qiling_automap.py`](code/qiling_automap.py) | auto-map 未映射页 → 让库跑到底 |
